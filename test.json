@@ -1,0 +1,75 @@
+{
+    "version": 1,
+    "configHash": "bde7955d99ba3ea414a69299888956625d1de262e99ee41d1a33c89129abedc1",
+    "minGroupSize": 2,
+    "root": {
+        "type": "folder",
+        "depth": 1
+    },
+    "branches": {
+        "default": [
+            {
+                "type": "field",
+                "field": "type"
+            }
+        ],
+        "folders": {
+            "任务": [
+                {
+                    "type": "field",
+                    "field": "status"
+                },
+                {
+                    "type": "field",
+                    "field": "date",
+                    "granularity": "month"
+                }
+            ],
+            "问答": []
+        }
+    },
+    "resolved": {
+        "/": [
+            {
+                "type": "field",
+                "field": "type"
+            }
+        ],
+        "人员": [
+            {
+                "type": "field",
+                "field": "type"
+            }
+        ],
+        "任务": [
+            {
+                "type": "field",
+                "field": "status"
+            },
+            {
+                "type": "date",
+                "field": "date",
+                "granularity": "month"
+            }
+        ],
+        "示例": [
+            {
+                "type": "field",
+                "field": "type"
+            }
+        ],
+        "组织": [
+            {
+                "type": "field",
+                "field": "type"
+            }
+        ],
+        "问答": [],
+        "项目": [
+            {
+                "type": "field",
+                "field": "type"
+            }
+        ]
+    }
+}

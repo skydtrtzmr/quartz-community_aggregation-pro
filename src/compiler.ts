@@ -1,0 +1,131 @@
+import { createHash } from "node:crypto"
+import { slugifyPath } from "@quartz-community/utils/path"
+import type {
+  AggregationArtifact,
+  AggregationRule,
+  NormalizedAggregationConfiguration,
+} from "./types"
+
+const base = "configuration.aggregation"
+
+function fail(path: string, message: string): never {
+  throw new Error(`[AggregationPro] ${path}: ${message}`)
+}
+
+function object(value: unknown, path: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    fail(path, "expected an object")
+  }
+  return value as Record<string, unknown>
+}
+
+function keys(value: Record<string, unknown>, allowed: string[], path: string) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) fail(`${path}.${key}`, "unknown key")
+  }
+}
+
+function integer(value: unknown, fallback: number, min: number, path: string): number {
+  if (value === undefined) return fallback
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min) {
+    fail(path, `expected an integer >= ${min}`)
+  }
+  return value
+}
+
+function field(value: unknown, path: string): string {
+  if (typeof value !== "string" || !value.trim()) fail(path, "expected a non-empty field name")
+  return value
+}
+
+function rule(value: unknown, path: string): AggregationRule {
+  const input = object(value, path)
+  if (input.type === "folder") {
+    keys(input, ["type", "depth"], path)
+    return { type: "folder", depth: integer(input.depth, 1, 1, `${path}.depth`) }
+  }
+  if (input.type === "field") {
+    keys(input, ["type", "field"], path)
+    return { type: "field", field: field(input.field, `${path}.field`) }
+  }
+  if (input.type === "date") {
+    keys(input, ["type", "field", "granularity"], path)
+    const name = field(input.field, `${path}.field`)
+    const granularity = input.granularity
+    if (granularity !== "year" && granularity !== "month" && granularity !== "quarter") {
+      fail(`${path}.granularity`, "expected year, month or quarter")
+    }
+    return { type: "date", field: name, granularity }
+  }
+  return fail(`${path}.type`, "expected folder, field or date")
+}
+
+function chain(value: unknown, path: string): AggregationRule[] {
+  if (!Array.isArray(value)) fail(path, "expected an array; use [] to disable further grouping")
+  return value.map((item, index) => rule(item, `${path}[${index}]`))
+}
+
+// Match Quartz slug spelling; reject traversal rather than interpreting it as inheritance.
+function directoryKey(value: string, path: string): string {
+  if (value === "/") return "/"
+  const clean = value.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")
+  const parts = clean.split("/")
+  if (parts.some((part) => !part || part === "." || part === "..")) {
+    fail(path, "expected a content-relative directory path")
+  }
+  const normalized = slugifyPath(clean)
+  if (normalized.split("/").some((part) => !part)) fail(path, "directory becomes empty after normalization")
+  return normalized
+}
+
+export function normalizeAggregation(value: unknown): NormalizedAggregationConfiguration {
+  const input = object(value, base)
+  keys(input, ["minGroupSize", "root", "branches"], base)
+  const root = rule(input.root, `${base}.root`)
+  if (root.type !== "folder") fail(`${base}.root.type`, "only folder is supported for the root")
+  const branches = input.branches === undefined ? {} : object(input.branches, `${base}.branches`)
+  keys(branches, ["default", "folders"], `${base}.branches`)
+  const folders = branches.folders === undefined ? {} : object(branches.folders, `${base}.branches.folders`)
+  const entries = new Map<string, AggregationRule[]>()
+  for (const [key, value] of Object.entries(folders)) {
+    const path = `${base}.branches.folders[${JSON.stringify(key)}]`
+    const normalized = directoryKey(key, path)
+    if (entries.has(normalized)) fail(path, `duplicate normalized directory: ${normalized}`)
+    entries.set(normalized, chain(value, path))
+  }
+  return {
+    minGroupSize: integer(input.minGroupSize, 2, 2, `${base}.minGroupSize`),
+    root: { type: "folder", depth: root.depth ?? 1 },
+    branches: {
+      default: branches.default === undefined ? [] : chain(branches.default, `${base}.branches.default`),
+      folders: Object.fromEntries([...entries].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)),
+    },
+  }
+}
+
+export function resolveChain(config: NormalizedAggregationConfiguration, context: string): AggregationRule[] {
+  let current = context
+  while (current) {
+    // Presence, not length: [] must not fall through to a parent rule.
+    if (Object.hasOwn(config.branches.folders, current)) return config.branches.folders[current]!
+    const slash = current.lastIndexOf("/")
+    current = slash > 0 ? current.slice(0, slash) : ""
+  }
+  return config.branches.default
+}
+
+export function buildAggregationArtifact(value: unknown, sourceSlugs: string[]): AggregationArtifact {
+  const config = normalizeAggregation(value)
+  const contexts = new Set<string>()
+  for (const slug of sourceSlugs) {
+    // Full slugs retain /index, so a folder index belongs to its own directory.
+    const parts = slug.split("/").slice(0, -1)
+    contexts.add(parts.slice(0, config.root.depth).join("/") || "/")
+  }
+  return {
+    version: 1,
+    configHash: createHash("sha256").update(JSON.stringify(config)).digest("hex"),
+    ...config,
+    resolved: Object.fromEntries([...contexts].sort().map((context) => [context, resolveChain(config, context)])),
+  }
+}

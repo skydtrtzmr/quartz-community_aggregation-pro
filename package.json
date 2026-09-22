@@ -1,0 +1,45 @@
+{
+  "name": "aggregation-pro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Compile shared Quartz aggregation rules into static/aggregation.json",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/skydtrtzmr/quartz-community_aggregation-pro.git" },
+  "files": ["dist", "README.md"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./types": { "types": "./dist/types.d.ts", "import": "./dist/types.js" },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --maxWorkers=1 --minWorkers=1"
+  },
+  "dependencies": {
+    "@quartz-community/types": "^1.0.0",
+    "@quartz-community/utils": "^1.0.0"
+  },
+  "devDependencies": {
+    "github-slugger": "^2.0.0",
+    "@types/node": "^24.10.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "engines": { "node": ">=22" },
+  "quartz": {
+    "name": "aggregation-pro",
+    "displayName": "Aggregation Pro",
+    "category": "emitter",
+    "version": "0.1.0",
+    "quartzVersion": ">=5.0.0",
+    "defaultOrder": 45,
+    "defaultEnabled": false,
+    "dependencies": [],
+    "defaultOptions": {},
+    "optionSchema": {}
+  }
+}
