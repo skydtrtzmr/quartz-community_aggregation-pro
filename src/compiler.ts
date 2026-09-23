@@ -48,16 +48,7 @@ function rule(value: unknown, path: string): AggregationRule {
     keys(input, ["type", "field"], path)
     return { type: "field", field: field(input.field, `${path}.field`) }
   }
-  if (input.type === "date") {
-    keys(input, ["type", "field", "granularity"], path)
-    const name = field(input.field, `${path}.field`)
-    const granularity = input.granularity
-    if (granularity !== "year" && granularity !== "month" && granularity !== "quarter") {
-      fail(`${path}.granularity`, "expected year, month or quarter")
-    }
-    return { type: "date", field: name, granularity }
-  }
-  return fail(`${path}.type`, "expected folder, field or date")
+  return fail(`${path}.type`, "expected folder or field")
 }
 
 function chain(value: unknown, path: string): AggregationRule[] {

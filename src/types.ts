@@ -4,10 +4,7 @@ export interface FolderAggregationRule {
   depth?: number
 }
 
-export type AggregationRule =
-  | FolderAggregationRule
-  | { type: "field"; field: string }
-  | { type: "date"; field: string; granularity: "year" | "month" | "quarter" }
+export type AggregationRule = FolderAggregationRule | { type: "field"; field: string }
 
 export interface AggregationConfiguration {
   minGroupSize?: number

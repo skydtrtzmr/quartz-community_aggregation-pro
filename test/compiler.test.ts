@@ -40,6 +40,8 @@ describe("aggregation protocol", () => {
     [{ root: { type: "folder", depth: 0 } }, "depth"],
     [{ root: { type: "field", field: "status" } }, "root.type"],
     [{ ...base, branches: { default: [{ type: "field" }] } }, "field"],
+    [{ ...base, branches: { default: [{ type: "date", field: "date", granularity: "year" }] } }, "expected folder or field"],
+    [{ ...base, branches: { default: [{ type: "field", field: "status", granularity: "year" }] } }, "granularity"],
     [{ ...base, branches: { folders: { "任务": null } } }, "expected an array"],
     [{ ...base, branches: { folders: { "../任务": [] } } }, "directory path"],
     [{ ...base, branches: { folders: { "A B": [], "a-b": [] } } }, "duplicate normalized"],
@@ -47,7 +49,7 @@ describe("aggregation protocol", () => {
     expect(() => normalizeAggregation(value)).toThrow(String(message))
   })
   it("keeps rule order significant for hashing", () => {
-    const rules = [status, { type: "date", field: "date", granularity: "month" }]
+    const rules = [status, { type: "field", field: "date" }]
     const a = buildAggregationArtifact({ ...base, branches: { default: rules } }, [])
     const b = buildAggregationArtifact({ ...base, branches: { default: [...rules].reverse() } }, [])
     expect(a.configHash).not.toBe(b.configHash)
