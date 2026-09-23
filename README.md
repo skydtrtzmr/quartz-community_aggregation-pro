@@ -25,7 +25,7 @@ plugins:
   此时 `任务/年度` 覆盖不会生效；若需要第二层上下文需设置 depth=2。
 - 未配置的目录逐层回退，最终使用 default。显式 `[]` 表示停止继承和后续聚合。
 - 目录 key 统一为 Quartz slug 路径，规范化后冲突直接报错。`/` 代表根目录。
-- minGroupSize 默认 2，按单组成员数判断。分组和展示由消费方实施，本插件不创建图节点。
+- minGroupSize 默认 2。graph-pro 在目录分支当前层只要有一类达到阈值，便统一聚合全部类别；否则尝试下一条规则，最终整体散开。本插件不创建图节点。
 - 新配置缺失时不输出产物；新配置无效时抛错，禁止静默回退。
 - 日期规则必须明确 field 和 granularity，不隐式替换业务字段。
 
@@ -40,8 +40,8 @@ plugins:
 
 ## 阶段范围
 
-graph-pro 已在侧栏局部图及放大局部图中消费该协议，首层和后续展开共用分组逻辑；
-全局图谱尚未接入。消费方读取产物，不复制 compiler。
+graph-pro 已在局部图、全局预计算及运行时展开中消费该协议，首层和后续展开共用分组逻辑。
+消费方读取产物，不复制 compiler；大区展示仍由 graph-pro 的 regionRules 控制。
 独立插件所用社区 BuildCtx 类型尚无 aggregation，入口用 unknown 后严格校验；
 宿主核心 GlobalConfiguration 与 JSON Schema 已同步声明配置结构。
 
