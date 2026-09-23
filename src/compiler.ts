@@ -85,7 +85,10 @@ export function normalizeAggregation(value: unknown): NormalizedAggregationConfi
     entries.set(normalized, chain(value, path))
   }
   return {
-    minGroupSize: integer(input.minGroupSize, 2, 2, `${base}.minGroupSize`),
+    // 下限放宽到 1：1 表示「每个取值都成组」。
+    // 用于需要「全量可跳转」（每个维度值都有聚合节点 → 都能进维度值页）的场景，
+    // 与维度页「全量出页」的口径一致；默认仍是 2（避免小邻域里冒出一堆单成员节点）。
+    minGroupSize: integer(input.minGroupSize, 2, 1, `${base}.minGroupSize`),
     root: { type: "folder", depth: root.depth ?? 1 },
     branches: {
       default: branches.default === undefined ? [] : chain(branches.default, `${base}.branches.default`),

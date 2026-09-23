@@ -35,7 +35,7 @@ describe("aggregation protocol", () => {
   })
   it.each([
     [{ ...base, typo: true }, "typo"],
-    [{ ...base, minGroupSize: 1 }, "minGroupSize"],
+    [{ ...base, minGroupSize: 0 }, "minGroupSize"],
     [{ ...base, minGroupSize: 2.5 }, "minGroupSize"],
     [{ root: { type: "folder", depth: 0 } }, "depth"],
     [{ root: { type: "field", field: "status" } }, "root.type"],
