@@ -33,27 +33,20 @@ function integer(value: unknown, fallback: number, min: number, path: string): n
   return value
 }
 
-function field(value: unknown, path: string): string {
-  if (typeof value !== "string" || !value.trim()) fail(path, "expected a non-empty field name")
-  return value
-}
-
-function rule(value: unknown, path: string): AggregationRule {
-  const input = object(value, path)
-  if (input.type === "folder") {
-    keys(input, ["type", "depth"], path)
-    return { type: "folder", depth: integer(input.depth, 1, 1, `${path}.depth`) }
+/**
+ * 字段链（新写法：纯字段名数组）。编译期转回内部的 `{ type: "field", field }`，
+ * 产物 `aggregation.json` 与下游消费者因此零改动。
+ * 顺序即分组顺序；`[]` 显式停止继承。
+ */
+function fieldChain(value: unknown, path: string): AggregationRule[] {
+  if (!Array.isArray(value)) {
+    fail(path, "expected an array of field names; use [] to disable further grouping")
   }
-  if (input.type === "field") {
-    keys(input, ["type", "field"], path)
-    return { type: "field", field: field(input.field, `${path}.field`) }
-  }
-  return fail(`${path}.type`, "expected folder or field")
-}
-
-function chain(value: unknown, path: string): AggregationRule[] {
-  if (!Array.isArray(value)) fail(path, "expected an array; use [] to disable further grouping")
-  return value.map((item, index) => rule(item, `${path}[${index}]`))
+  return value.map((item, index) => {
+    const itemPath = `${path}[${index}]`
+    if (typeof item !== "string" || !item.trim()) fail(itemPath, "expected a non-empty field name")
+    return { type: "field", field: item }
+  })
 }
 
 // Match Quartz slug spelling; reject traversal rather than interpreting it as inheritance.
@@ -71,9 +64,7 @@ function directoryKey(value: string, path: string): string {
 
 export function normalizeAggregation(value: unknown): NormalizedAggregationConfiguration {
   const input = object(value, base)
-  keys(input, ["minGroupSize", "root", "branches"], base)
-  const root = rule(input.root, `${base}.root`)
-  if (root.type !== "folder") fail(`${base}.root.type`, "only folder is supported for the root")
+  keys(input, ["minGroupSize", "folderDepth", "branches"], base)
   const branches = input.branches === undefined ? {} : object(input.branches, `${base}.branches`)
   keys(branches, ["default", "folders"], `${base}.branches`)
   const folders = branches.folders === undefined ? {} : object(branches.folders, `${base}.branches.folders`)
@@ -82,16 +73,17 @@ export function normalizeAggregation(value: unknown): NormalizedAggregationConfi
     const path = `${base}.branches.folders[${JSON.stringify(key)}]`
     const normalized = directoryKey(key, path)
     if (entries.has(normalized)) fail(path, `duplicate normalized directory: ${normalized}`)
-    entries.set(normalized, chain(value, path))
+    entries.set(normalized, fieldChain(value, path))
   }
   return {
     // 下限放宽到 1：1 表示「每个取值都成组」。
     // 用于需要「全量可跳转」（每个维度值都有聚合节点 → 都能进维度值页）的场景，
     // 与维度页「全量出页」的口径一致；默认仍是 2（避免小邻域里冒出一堆单成员节点）。
     minGroupSize: integer(input.minGroupSize, 2, 1, `${base}.minGroupSize`),
-    root: { type: "folder", depth: root.depth ?? 1 },
+    // 文件夹恒为第一层，配置只暴露层数；内部仍保留 folder 规则 → 产物与下游消费方零改动
+    root: { type: "folder", depth: integer(input.folderDepth, 1, 1, `${base}.folderDepth`) },
     branches: {
-      default: branches.default === undefined ? [] : chain(branches.default, `${base}.branches.default`),
+      default: branches.default === undefined ? [] : fieldChain(branches.default, `${base}.branches.default`),
       folders: Object.fromEntries([...entries].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)),
     },
   }
