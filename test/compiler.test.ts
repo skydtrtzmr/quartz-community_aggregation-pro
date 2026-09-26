@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { buildAggregationArtifact, normalizeAggregation, resolveChain } from "../src/compiler"
 
 const status = { type: "field", field: "status" }
 const owner = { type: "field", field: "owner" }
-/** YAML 侧写法：folderDepth + 纯字段名链 */
+/** YAML 侧写法：folderDepth + 纯字段名链；`任务/特殊任务: []` 表示「配了个空链」 */
 const base = {
   folderDepth: 2,
   branches: {
@@ -13,11 +13,26 @@ const base = {
 }
 
 describe("aggregation protocol", () => {
-  it("inherits missing directories but preserves explicit disabling", () => {
+  it("inherits missing directories; an empty chain means unconfigured, not a stop", () => {
     const config = normalizeAggregation(base)
     expect(resolveChain(config, "任务/年度任务")).toEqual([owner])
-    expect(resolveChain(config, "任务/特殊任务/子目录")).toEqual([])
+    // 空数组 = 未配置 → 继续向上继承（先父目录「任务」，再 default）
+    expect(resolveChain(config, "任务/特殊任务")).toEqual([owner])
+    expect(resolveChain(config, "任务/特殊任务/子目录")).toEqual([owner])
     expect(resolveChain(config, "人员")).toEqual([status])
+    // 归一化阶段即丢弃：产物里不存在语义为空的条目
+    expect(config.branches.folders).not.toHaveProperty("任务/特殊任务")
+  })
+  it("warns for an empty chain and keeps the rest of the configuration", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const config = normalizeAggregation(base)
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0]?.[0])).toContain("等价于未配置该目录")
+      expect(resolveChain(config, "人员")).toEqual([status])
+    } finally {
+      spy.mockRestore()
+    }
   })
   it("is byte stable across configuration key order and source enumeration order", () => {
     const a = buildAggregationArtifact(base, ["任务/年度任务/a", "人员/index", "index"])

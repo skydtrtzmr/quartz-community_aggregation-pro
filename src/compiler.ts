@@ -12,6 +12,10 @@ function fail(path: string, message: string): never {
   throw new Error(`[AggregationPro] ${path}: ${message}`)
 }
 
+function warn(message: string): void {
+  console.warn(`[AggregationPro] ${message}`)
+}
+
 function object(value: unknown, path: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     fail(path, "expected an object")
@@ -36,11 +40,11 @@ function integer(value: unknown, fallback: number, min: number, path: string): n
 /**
  * 字段链（新写法：纯字段名数组）。编译期转回内部的 `{ type: "field", field }`，
  * 产物 `aggregation.json` 与下游消费者因此零改动。
- * 顺序即分组顺序；`[]` 显式停止继承。
+ * 顺序即分组顺序；空数组等价于「未配置这一层」，继续向上继承（见 normalizeAggregation）。
  */
 function fieldChain(value: unknown, path: string): AggregationRule[] {
   if (!Array.isArray(value)) {
-    fail(path, "expected an array of field names; use [] to disable further grouping")
+    fail(path, "expected an array of field names")
   }
   return value.map((item, index) => {
     const itemPath = `${path}[${index}]`
@@ -69,11 +73,22 @@ export function normalizeAggregation(value: unknown): NormalizedAggregationConfi
   keys(branches, ["default", "folders"], `${base}.branches`)
   const folders = branches.folders === undefined ? {} : object(branches.folders, `${base}.branches.folders`)
   const entries = new Map<string, AggregationRule[]>()
+  // 归一化后的目录键全集：查重用它而不是 entries（空链会被丢弃，不能只看结果表）
+  const seen = new Set<string>()
   for (const [key, value] of Object.entries(folders)) {
     const path = `${base}.branches.folders[${JSON.stringify(key)}]`
     const normalized = directoryKey(key, path)
-    if (entries.has(normalized)) fail(path, `duplicate normalized directory: ${normalized}`)
-    entries.set(normalized, fieldChain(value, path))
+    if (seen.has(normalized)) fail(path, `duplicate normalized directory: ${normalized}`)
+    seen.add(normalized)
+    const chain = fieldChain(value, path)
+    // 目录级只有两态：「配了字段」与「未配置」。空数组不再表示「显式中断聚合」——
+    // 直接按未配置丢弃；否则产物里会留下语义为空、却与「键不存在」表现不同的条目
+    // （也会污染「读配置 → 回写配置」的往返结果）。
+    if (chain.length === 0) {
+      warn(`${path} 是空数组，等价于未配置该目录，将逐层向上继承（最终用 ${base}.branches.default）`)
+      continue
+    }
+    entries.set(normalized, chain)
   }
   return {
     // 下限放宽到 1：1 表示「每个取值都成组」。
@@ -89,11 +104,17 @@ export function normalizeAggregation(value: unknown): NormalizedAggregationConfi
   }
 }
 
+/**
+ * 逐层向上回退取规则链，最终用 `branches.default`。
+ *
+ * 目录级没有「显式中断」态：`folders` 里的空链在归一化阶段已被丢弃；
+ * 这里再按长度兜一层（配置若绕过归一化被外部构造，空链同样视作未配置）。
+ */
 export function resolveChain(config: NormalizedAggregationConfiguration, context: string): AggregationRule[] {
   let current = context
   while (current) {
-    // Presence, not length: [] must not fall through to a parent rule.
-    if (Object.hasOwn(config.branches.folders, current)) return config.branches.folders[current]!
+    const chain = config.branches.folders[current]
+    if (chain && chain.length > 0) return chain
     const slash = current.lastIndexOf("/")
     current = slash > 0 ? current.slice(0, slash) : ""
   }

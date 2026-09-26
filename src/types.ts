@@ -17,7 +17,7 @@ export interface AggregationConfiguration {
   /** 文件夹上下文层数（文件夹恒为第一层，不需要再写 `type: folder`） */
   folderDepth?: number
   branches?: {
-    /** 字段名列表，顺序即分组顺序；`[]` 显式停止继承 */
+    /** 字段名列表，顺序即分组顺序；空数组等价于未配置（继续向上继承） */
     default?: string[]
     folders?: Record<string, string[]>
   }
